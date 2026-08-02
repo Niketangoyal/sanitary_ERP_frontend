@@ -24,10 +24,13 @@ import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/DashboardOutlined";
 import PeopleIcon from "@mui/icons-material/PeopleAltOutlined";
 import Inventory2Icon from "@mui/icons-material/Inventory2Outlined";
+import LocalShippingIcon from "@mui/icons-material/LocalShippingOutlined";
+import StorefrontIcon from "@mui/icons-material/StorefrontOutlined";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLongOutlined";
 import AssignmentReturnIcon from "@mui/icons-material/AssignmentReturnOutlined";
 import PaymentsIcon from "@mui/icons-material/PaymentsOutlined";
 import MenuBookIcon from "@mui/icons-material/MenuBookOutlined";
+import BadgeIcon from "@mui/icons-material/BadgeOutlined";
 import AssessmentIcon from "@mui/icons-material/AssessmentOutlined";
 import SettingsIcon from "@mui/icons-material/SettingsOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
@@ -43,10 +46,13 @@ const NAV_ITEMS = [
   { label: "Dashboard", path: "/", icon: DashboardIcon },
   { label: "Customers", path: "/customers", icon: PeopleIcon },
   { label: "Products", path: "/products", icon: Inventory2Icon },
+  { label: "Suppliers", path: "/suppliers", icon: StorefrontIcon },
+  { label: "Purchases", path: "/purchases", icon: LocalShippingIcon },
   { label: "Sales", path: "/sales", icon: ReceiptLongIcon },
   { label: "Returns", path: "/returns", icon: AssignmentReturnIcon },
   { label: "Payments", path: "/payments", icon: PaymentsIcon },
   { label: "Ledger", path: "/ledger", icon: MenuBookIcon },
+  { label: "Employees", path: "/employees", icon: BadgeIcon },
   { label: "Reports", path: "/reports", icon: AssessmentIcon },
   { label: "Settings", path: "/settings", icon: SettingsIcon },
 ];

@@ -12,6 +12,8 @@ import { StatusChip } from "@/components/StatusChip";
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
 import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
 import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
+import PointOfSaleOutlinedIcon from "@mui/icons-material/PointOfSaleOutlined";
+import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
 import { customerService } from "@/services/customer.service";
 import { formatCurrency, formatDate } from "@/utils/format";
 
@@ -38,7 +40,7 @@ export const CustomerDetailPage = () => {
 
   if (isLoading || !data) return <PageLoader />;
 
-  const { customer, cashBalance, billBalance, totalOutstanding } = data;
+  const { customer, cashBalance, billBalance, totalOutstanding, totalSales, totalPayments } = data;
 
   return (
     <>
@@ -91,6 +93,22 @@ export const CustomerDetailPage = () => {
             value={formatCurrency(totalOutstanding)}
             icon={PaidOutlinedIcon}
             color={totalOutstanding > 0 ? "error" : "success"}
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <StatCard
+            label="Total Sales"
+            value={formatCurrency(totalSales)}
+            icon={PointOfSaleOutlinedIcon}
+            color="primary"
+          />
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6 }}>
+          <StatCard
+            label="Total Payments Received"
+            value={formatCurrency(totalPayments)}
+            icon={PaymentsOutlinedIcon}
+            color="success"
           />
         </Grid>
       </Grid>

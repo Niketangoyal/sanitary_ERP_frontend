@@ -1,5 +1,13 @@
 import { axiosClient } from "@/api/axiosClient";
-import type { ApiResponse, PaymentMode, Sale, ReturnDoc, Payment, OutstandingCustomerRow } from "@/types";
+import type {
+  ApiResponse,
+  PaymentMode,
+  Sale,
+  ReturnDoc,
+  Payment,
+  OutstandingCustomerRow,
+  ProfitReportData,
+} from "@/types";
 
 export interface ReportRangeParams {
   from?: string;
@@ -92,6 +100,10 @@ export const reportService = {
     const { data } = await axiosClient.get<ApiResponse<DateWiseSalesRow[]>>("/reports/date-wise-sales", {
       params,
     });
+    return data.data;
+  },
+  profit: async (params: ReportRangeParams): Promise<ProfitReportData> => {
+    const { data } = await axiosClient.get<ApiResponse<ProfitReportData>>("/reports/profit", { params });
     return data.data;
   },
 };

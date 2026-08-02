@@ -1,10 +1,24 @@
 import { axiosClient } from "@/api/axiosClient";
-import type { ApiResponse, DashboardSummary, OutstandingCustomerRow, RecentTransaction } from "@/types";
+import type {
+  ApiResponse,
+  DashboardPeriodSummary,
+  DashboardSummary,
+  OutstandingCustomerRow,
+  PeriodPreset,
+  RecentTransaction,
+} from "@/types";
 import type { MonthlySalesRow } from "@/services/report.service";
 
 export const dashboardService = {
   summary: async (): Promise<DashboardSummary> => {
     const { data } = await axiosClient.get<ApiResponse<DashboardSummary>>("/dashboard/summary");
+    return data.data;
+  },
+  periodSummary: async (period: PeriodPreset, from?: string, to?: string): Promise<DashboardPeriodSummary> => {
+    const { data } = await axiosClient.get<ApiResponse<DashboardPeriodSummary>>(
+      "/dashboard/period-summary",
+      { params: { period, from, to } },
+    );
     return data.data;
   },
   monthlySales: async (year?: number): Promise<MonthlySalesRow[]> => {

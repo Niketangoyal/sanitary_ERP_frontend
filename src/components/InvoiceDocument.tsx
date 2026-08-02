@@ -1,5 +1,7 @@
-import { Box, Divider, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
+import { Box, Divider, Grid2 as Grid, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import { formatCurrency, formatDate } from "@/utils/format";
+import { PAYMENT_MODE_LABELS, SALE_TYPE_LABELS } from "@/utils/constants";
+import { PaymentStatusChip } from "@/components/StatusChip";
 import type { Sale, Settings } from "@/types";
 
 interface InvoiceDocumentProps {
@@ -50,6 +52,9 @@ export const InvoiceDocument = ({ sale, settings }: InvoiceDocumentProps) => {
           <Typography variant="body2">
             <strong>Date:</strong> {formatDate(sale.invoiceDate)}
           </Typography>
+          <Typography variant="body2">
+            <strong>Sale Type:</strong> {SALE_TYPE_LABELS[sale.saleType]}
+          </Typography>
         </Box>
       </Stack>
 
@@ -69,6 +74,45 @@ export const InvoiceDocument = ({ sale, settings }: InvoiceDocumentProps) => {
           {customer?.gstNumber && <Typography variant="body2">GSTIN: {customer.gstNumber}</Typography>}
         </Box>
       </Stack>
+
+      <Grid container spacing={2} sx={{ mt: 2, p: 1.5, borderRadius: 2, bgcolor: "action.hover" }}>
+        <Grid size={{ xs: 6, sm: 3 }}>
+          <Typography variant="caption" color="text.secondary">
+            PAYMENT STATUS
+          </Typography>
+          <Box sx={{ mt: 0.5 }}>
+            <PaymentStatusChip status={sale.paymentStatus} />
+          </Box>
+        </Grid>
+        <Grid size={{ xs: 6, sm: 3 }}>
+          <Typography variant="caption" color="text.secondary">
+            PAYMENT METHOD
+          </Typography>
+          <Typography variant="body2" fontWeight={600}>
+            {sale.paymentMethod ? PAYMENT_MODE_LABELS[sale.paymentMethod] : "-"}
+          </Typography>
+        </Grid>
+        <Grid size={{ xs: 6, sm: 3 }}>
+          <Typography variant="caption" color="text.secondary">
+            AMOUNT PAID
+          </Typography>
+          <Typography variant="body2" fontWeight={600} color="success.main">
+            {formatCurrency(sale.amountPaid)}
+          </Typography>
+        </Grid>
+        <Grid size={{ xs: 6, sm: 3 }}>
+          <Typography variant="caption" color="text.secondary">
+            BALANCE DUE
+          </Typography>
+          <Typography
+            variant="body2"
+            fontWeight={600}
+            color={Number(sale.balanceDue) > 0 ? "warning.main" : "success.main"}
+          >
+            {formatCurrency(sale.balanceDue)}
+          </Typography>
+        </Grid>
+      </Grid>
 
       <Table size="small" sx={{ mt: 3 }}>
         <TableHead>
@@ -118,6 +162,19 @@ export const InvoiceDocument = ({ sale, settings }: InvoiceDocumentProps) => {
             </Typography>
             <Typography variant="subtitle1" fontWeight={700} color="primary.main">
               {formatCurrency(sale.grandTotal)}
+            </Typography>
+          </Stack>
+          <Stack direction="row" justifyContent="space-between" sx={{ py: 0.5 }}>
+            <Typography color="text.secondary">Amount Paid</Typography>
+            <Typography color="success.main">{formatCurrency(sale.amountPaid)}</Typography>
+          </Stack>
+          <Stack direction="row" justifyContent="space-between" sx={{ py: 0.5 }}>
+            <Typography variant="subtitle2">Balance Due</Typography>
+            <Typography
+              variant="subtitle2"
+              color={Number(sale.balanceDue) > 0 ? "warning.main" : "success.main"}
+            >
+              {formatCurrency(sale.balanceDue)}
             </Typography>
           </Stack>
         </Box>

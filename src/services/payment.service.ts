@@ -36,4 +36,11 @@ export const paymentService = {
     const { data } = await axiosClient.post<ApiResponse<Payment>>("/payments", payload);
     return data.data;
   },
+  update: async (id: string, payload: Partial<Omit<CreatePaymentPayload, "customerId">>): Promise<Payment> => {
+    const { data } = await axiosClient.put<ApiResponse<Payment>>(`/payments/${id}`, payload);
+    return data.data;
+  },
+  remove: async (id: string, reason?: string): Promise<void> => {
+    await axiosClient.delete(`/payments/${id}`, { data: { reason } });
+  },
 };

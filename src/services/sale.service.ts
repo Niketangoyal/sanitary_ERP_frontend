@@ -1,5 +1,5 @@
 import { axiosClient } from "@/api/axiosClient";
-import type { ApiResponse, PaginatedResponse, Sale } from "@/types";
+import type { ApiResponse, PaginatedResponse, PaymentMode, PaymentStatus, Sale, SaleType } from "@/types";
 
 export interface SaleItemPayload {
   productId: string;
@@ -12,6 +12,10 @@ export interface SaleItemPayload {
 export interface CreateSalePayload {
   customerId: string;
   invoiceDate: string;
+  saleType: SaleType;
+  paymentStatus: PaymentStatus;
+  paymentMethod?: PaymentMode;
+  amountPaid?: number;
   notes?: string;
   items: SaleItemPayload[];
 }
@@ -21,6 +25,8 @@ export interface SaleListParams {
   limit?: number;
   search?: string;
   customerId?: string;
+  saleType?: SaleType;
+  paymentStatus?: PaymentStatus;
   from?: string;
   to?: string;
 }
@@ -41,5 +47,12 @@ export const saleService = {
   create: async (payload: CreateSalePayload): Promise<Sale> => {
     const { data } = await axiosClient.post<ApiResponse<Sale>>("/sales", payload);
     return data.data;
+  },
+  update: async (id: string, payload: Omit<CreateSalePayload, "customerId">): Promise<Sale> => {
+    const { data } = await axiosClient.put<ApiResponse<Sale>>(`/sales/${id}`, payload);
+    return data.data;
+  },
+  remove: async (id: string, reason?: string): Promise<void> => {
+    await axiosClient.delete(`/sales/${id}`, { data: { reason } });
   },
 };

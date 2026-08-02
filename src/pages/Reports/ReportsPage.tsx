@@ -9,8 +9,12 @@ import { PaymentsReportTab } from "./PaymentsReportTab";
 import { ItemWiseSalesReportTab } from "./ItemWiseSalesReportTab";
 import { MonthlySalesReportTab } from "./MonthlySalesReportTab";
 import { DateWiseSalesReportTab } from "./DateWiseSalesReportTab";
+import { ProfitReportTab } from "./ProfitReportTab";
+import { LeaveReportTab } from "./LeaveReportTab";
+import { AdvanceReportTab } from "./AdvanceReportTab";
 
 const TABS = [
+  { key: "profit", label: "Profit" },
   { key: "outstanding", label: "Outstanding" },
   { key: "sales", label: "Sales" },
   { key: "returns", label: "Returns" },
@@ -18,12 +22,14 @@ const TABS = [
   { key: "item-wise", label: "Item Wise Sales" },
   { key: "monthly", label: "Monthly Sales" },
   { key: "date-wise", label: "Date Wise Sales" },
+  { key: "leave", label: "Leave" },
+  { key: "advances", label: "Advances" },
   { key: "ledger", label: "Customer Ledger" },
 ] as const;
 
 export const ReportsPage = () => {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("outstanding");
+  const [tab, setTab] = useState<(typeof TABS)[number]["key"]>("profit");
 
   const handleChange = (_e: SyntheticEvent, value: (typeof TABS)[number]["key"]) => {
     if (value === "ledger") {
@@ -50,6 +56,7 @@ export const ReportsPage = () => {
         ))}
       </Tabs>
 
+      {tab === "profit" && <ProfitReportTab />}
       {tab === "outstanding" && <OutstandingReportTab />}
       {tab === "sales" && <SalesReportTab />}
       {tab === "returns" && <ReturnsReportTab />}
@@ -57,6 +64,8 @@ export const ReportsPage = () => {
       {tab === "item-wise" && <ItemWiseSalesReportTab />}
       {tab === "monthly" && <MonthlySalesReportTab />}
       {tab === "date-wise" && <DateWiseSalesReportTab />}
+      {tab === "leave" && <LeaveReportTab />}
+      {tab === "advances" && <AdvanceReportTab />}
     </>
   );
 };

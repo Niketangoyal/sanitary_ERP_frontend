@@ -28,6 +28,8 @@ export interface CustomerWithBalance {
   cashBalance: number;
   billBalance: number;
   totalOutstanding: number;
+  totalSales: number;
+  totalPayments: number;
 }
 
 export const customerService = {
@@ -51,7 +53,7 @@ export const customerService = {
     const { data } = await axiosClient.put<ApiResponse<Customer>>(`/customers/${id}`, payload);
     return data.data;
   },
-  remove: async (id: string): Promise<void> => {
-    await axiosClient.delete(`/customers/${id}`);
+  remove: async (id: string, force = false, reason?: string): Promise<void> => {
+    await axiosClient.delete(`/customers/${id}`, { data: { force, reason } });
   },
 };

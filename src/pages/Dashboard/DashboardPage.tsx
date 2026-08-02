@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import dayjs from "dayjs";
 import {
   Chip,
@@ -32,21 +33,37 @@ import PaidOutlinedIcon from "@mui/icons-material/PaidOutlined";
 import PointOfSaleOutlinedIcon from "@mui/icons-material/PointOfSaleOutlined";
 import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
 import AssignmentReturnOutlinedIcon from "@mui/icons-material/AssignmentReturnOutlined";
+import TrendingUpOutlinedIcon from "@mui/icons-material/TrendingUpOutlined";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
 import { PageLoader } from "@/components/PageLoader";
+import { PeriodFilter } from "@/components/PeriodFilter";
 import { dashboardService } from "@/services/dashboard.service";
 import { formatCurrency, formatDate } from "@/utils/format";
+import { resolvePeriodRange } from "@/utils/dateRangePresets";
+import type { PeriodPreset } from "@/types";
 
 const currentYear = dayjs().year();
 
 export const DashboardPage = () => {
   const navigate = useNavigate();
+  const [period, setPeriod] = useState<PeriodPreset>("today");
+  const [range, setRange] = useState(resolvePeriodRange("today"));
 
   const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ["dashboard", "summary"],
     queryFn: dashboardService.summary,
   });
+
+  const { data: periodSummary } = useQuery({
+    queryKey: ["dashboard", "period-summary", period, range.from, range.to],
+    queryFn: () => dashboardService.periodSummary(period, range.from, range.to),
+  });
+
+  const handlePeriodChange = (next: { period: PeriodPreset; from: string; to: string }) => {
+    setPeriod(next.period);
+    setRange(next.period === "custom" ? { from: next.from, to: next.to } : resolvePeriodRange(next.period));
+  };
 
   const { data: monthlySales = [] } = useQuery({
     queryKey: ["dashboard", "monthly-sales", currentYear],
@@ -91,6 +108,40 @@ export const DashboardPage = () => {
           </Grid>
         ))}
       </Grid>
+
+      <Typography variant="subtitle1" sx={{ mb: 1.5 }}>
+        Period Overview
+      </Typography>
+      <PeriodFilter period={period} from={range.from} to={range.to} onChange={handlePeriodChange} />
+
+      {periodSummary && (
+        <Grid container spacing={2.5} sx={{ mb: 3 }}>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <StatCard label="Sales" value={formatCurrency(periodSummary.sales)} icon={PointOfSaleOutlinedIcon} color="primary" />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <StatCard label="Payments Received" value={formatCurrency(periodSummary.payments)} icon={PaymentsOutlinedIcon} color="success" />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <StatCard label="Returns" value={formatCurrency(periodSummary.returns)} icon={AssignmentReturnOutlinedIcon} color="secondary" />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <StatCard label="Cash (Kacha) Sales" value={formatCurrency(periodSummary.cashSales)} icon={AccountBalanceWalletOutlinedIcon} color="secondary" />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <StatCard label="Bill (Pakka) Sales" value={formatCurrency(periodSummary.billSales)} icon={ReceiptLongOutlinedIcon} color="secondary" />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <StatCard
+              label="Gross Profit"
+              value={formatCurrency(periodSummary.grossProfit)}
+              icon={TrendingUpOutlinedIcon}
+              color={periodSummary.grossProfit >= 0 ? "success" : "error"}
+              hint={`${periodSummary.profitPercent}% margin`}
+            />
+          </Grid>
+        </Grid>
+      )}
 
       <Grid container spacing={2.5} sx={{ mb: 3 }}>
         <Grid size={{ xs: 12, md: 6 }}>

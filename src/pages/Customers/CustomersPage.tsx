@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
-import { Button, IconButton, InputAdornment, Stack, TextField, Tooltip } from "@mui/material";
+import { Button, IconButton, InputAdornment, MenuItem, Stack, TextField, Tooltip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SearchIcon from "@mui/icons-material/Search";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
@@ -41,12 +41,17 @@ export const CustomersPage = () => {
   }, [debouncedSearch]);
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => customerService.remove(id),
+    mutationFn: ({ id, force }: { id: string; force: boolean }) => customerService.remove(id, force),
     onSuccess: () => {
       enqueueSnackbar("Customer deleted", { variant: "success" });
       queryClient.invalidateQueries({ queryKey: ["customers"] });
     },
-    onError: (err) => enqueueSnackbar(getErrorMessage(err), { variant: "error" }),
+    onError: (err) => {
+      // 409 (outstanding balance) is handled inline via a force-confirm prompt, not a toast.
+      if ((err as { response?: { status?: number } })?.response?.status !== 409) {
+        enqueueSnackbar(getErrorMessage(err), { variant: "error" });
+      }
+    },
   });
 
   const handleDelete = async (customer: Customer) => {
@@ -56,7 +61,22 @@ export const CustomersPage = () => {
       confirmLabel: "Delete",
       destructive: true,
     });
-    if (ok) deleteMutation.mutate(customer.id);
+    if (!ok) return;
+
+    try {
+      await deleteMutation.mutateAsync({ id: customer.id, force: false });
+    } catch (err) {
+      // Outstanding balance — ask the admin to explicitly confirm anyway.
+      if ((err as { response?: { status?: number } })?.response?.status === 409) {
+        const forceOk = await confirm({
+          title: "Outstanding balance",
+          message: `${getErrorMessage(err)} Delete anyway?`,
+          confirmLabel: "Delete Anyway",
+          destructive: true,
+        });
+        if (forceOk) deleteMutation.mutate({ id: customer.id, force: true });
+      }
+    }
   };
 
   const columns = useMemo<ColumnDef<Customer, any>[]>(
@@ -115,21 +135,34 @@ export const CustomersPage = () => {
         }
       />
 
-      <TextField
-        placeholder="Search by company, contact, mobile or GST..."
-        value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
-        sx={{ mb: 2, maxWidth: 420 }}
-        slotProps={{
-          input: {
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon fontSize="small" />
-              </InputAdornment>
-            ),
-          },
-        }}
-      />
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 2 }}>
+        <TextField
+          placeholder="Search by company, contact, mobile or GST..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          sx={{ maxWidth: 360, flex: 1 }}
+          slotProps={{
+            input: {
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon fontSize="small" />
+                </InputAdornment>
+              ),
+            },
+          }}
+        />
+        <TextField
+          select
+          label="Status"
+          value={filters.isActive ?? ""}
+          onChange={(e) => setFilters({ isActive: e.target.value || undefined } as never)}
+          sx={{ minWidth: 160 }}
+        >
+          <MenuItem value="">All Statuses</MenuItem>
+          <MenuItem value="true">Active</MenuItem>
+          <MenuItem value="false">Inactive</MenuItem>
+        </TextField>
+      </Stack>
 
       <DataTable
         columns={columns}

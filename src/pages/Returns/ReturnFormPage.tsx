@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { useFieldArray, useForm, Controller } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import dayjs from "dayjs";
@@ -10,7 +10,7 @@ import {
   Alert,
   Autocomplete,
   Button,
-  IconButton,
+  Chip,
   Paper,
   Stack,
   Table,
@@ -20,53 +20,60 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from "@mui/material";
 import Grid from "@mui/material/Grid2";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import SaveIcon from "@mui/icons-material/Save";
 import { PageHeader } from "@/components/PageHeader";
+import { PageLoader } from "@/components/PageLoader";
 import { CustomerAutocomplete } from "@/components/CustomerAutocomplete";
-import { ProductAutocomplete } from "@/components/ProductAutocomplete";
 import { returnService } from "@/services/return.service";
 import { saleService } from "@/services/sale.service";
 import { getErrorMessage } from "@/api/axiosClient";
 import { computeLineItem } from "@/utils/calc";
-import { formatCurrency } from "@/utils/format";
-import type { Customer, Product, Sale } from "@/types";
+import { formatCurrency, formatNumber } from "@/utils/format";
+import type { Customer, ReturnEligibleItem, Sale } from "@/types";
 
-const returnItemSchema = z.object({
-  productId: z.string().min(1, "Select a product"),
-  itemName: z.string(),
-  quantity: z.coerce.number().positive("Qty required"),
-  rate: z.coerce.number().min(0, "Rate required"),
-  gstPercent: z.coerce.number().min(0).max(100),
-});
-
-const returnFormSchema = z.object({
+const formSchema = z.object({
   customerId: z.string().min(1, "Select a customer"),
+  saleId: z.string().min(1, "Select the original invoice"),
   returnDate: z.string().min(1, "Return date is required"),
   reason: z.string().optional(),
-  items: z.array(returnItemSchema).min(1, "Add at least one item"),
 });
 
-type ReturnFormValues = z.infer<typeof returnFormSchema>;
+type ReturnFormValues = z.infer<typeof formSchema>;
 
-const emptyItem = { productId: "", itemName: "", quantity: 1, rate: 0, gstPercent: 0 };
+interface ReturnRow extends ReturnEligibleItem {
+  returnQty: number;
+}
 
 export const ReturnFormPage = () => {
+  const { id } = useParams();
+  const isEdit = !!id;
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [rows, setRows] = useState<ReturnRow[]>([]);
+  const [rowsError, setRowsError] = useState<string | null>(null);
+
+  const { data: existingReturn, isLoading: existingLoading } = useQuery({
+    queryKey: ["returns", id],
+    queryFn: () => returnService.getById(id as string),
+    enabled: isEdit,
+  });
 
   const { data: customerSales } = useQuery({
     queryKey: ["sales", "by-customer", selectedCustomer?.id],
-    queryFn: () => saleService.list({ customerId: selectedCustomer!.id, limit: 25 }),
-    enabled: !!selectedCustomer,
+    queryFn: () => saleService.list({ customerId: selectedCustomer!.id, limit: 50 }),
+    enabled: !!selectedCustomer && !isEdit,
+  });
+
+  const { data: eligibleItems, isFetching: eligibleLoading } = useQuery({
+    queryKey: ["returns", "eligible-items", selectedSale?.id, isEdit ? id : undefined],
+    queryFn: () => returnService.eligibleItems(selectedSale!.id, isEdit ? id : undefined),
+    enabled: !!selectedSale,
   });
 
   const {
@@ -74,33 +81,99 @@ export const ReturnFormPage = () => {
     control,
     handleSubmit,
     setValue,
-    watch,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<ReturnFormValues>({
-    resolver: zodResolver(returnFormSchema),
+    resolver: zodResolver(formSchema),
     defaultValues: {
       customerId: "",
+      saleId: "",
       returnDate: dayjs().format("YYYY-MM-DD"),
       reason: "",
-      items: [emptyItem],
     },
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: "items" });
-  const watchedItems = watch("items");
+  // Prefill from the existing return in edit mode — customer & invoice are fixed.
+  useEffect(() => {
+    if (!existingReturn) return;
+    setSelectedCustomer(existingReturn.customer ?? null);
+    setSelectedSale(existingReturn.sale ?? null);
+    reset({
+      customerId: existingReturn.customerId,
+      saleId: existingReturn.saleId ?? "",
+      returnDate: dayjs(existingReturn.returnDate).format("YYYY-MM-DD"),
+      reason: existingReturn.reason ?? "",
+    });
+  }, [existingReturn, reset]);
+
+  useEffect(() => {
+    const existingQtyByProduct = new Map(
+      (existingReturn?.items ?? []).map((item) => [item.productId, Number(item.quantity)]),
+    );
+    setRows(
+      (eligibleItems ?? []).map((item) => ({
+        ...item,
+        returnQty: existingQtyByProduct.get(item.productId) ?? 0,
+      })),
+    );
+  }, [eligibleItems, existingReturn]);
+
+  // Plain snapshot of form values, set on submit — read inside the mutation
+  // closure since RHF's own state isn't convenient to pull from there.
+  const [form, setForm] = useState<ReturnFormValues>({
+    customerId: "",
+    saleId: "",
+    returnDate: dayjs().format("YYYY-MM-DD"),
+    reason: "",
+  });
 
   const mutation = useMutation({
-    mutationFn: returnService.create,
+    mutationFn: () =>
+      isEdit
+        ? returnService.update(id as string, {
+            returnDate: form.returnDate,
+            reason: form.reason || undefined,
+            items: selectedRows.map((row) => ({
+              productId: row.productId,
+              quantity: row.returnQty,
+              rate: row.rate,
+              gstPercent: row.gstPercent,
+            })),
+          })
+        : returnService.create({
+            customerId: form.customerId,
+            returnDate: form.returnDate,
+            saleId: form.saleId,
+            reason: form.reason || undefined,
+            items: selectedRows.map((row) => ({
+              productId: row.productId,
+              quantity: row.returnQty,
+              rate: row.rate,
+              gstPercent: row.gstPercent,
+            })),
+          }),
     onSuccess: (ret) => {
-      enqueueSnackbar(`Return ${ret.returnNumber} recorded`, { variant: "success" });
-      navigate("/returns");
+      enqueueSnackbar(`Return ${ret.returnNumber} ${isEdit ? "updated" : "recorded"}`, { variant: "success" });
+      navigate(isEdit ? `/returns/${ret.id}` : "/returns");
     },
     onError: (err) => enqueueSnackbar(getErrorMessage(err), { variant: "error" }),
   });
 
-  const totals = watchedItems.reduce(
-    (acc, item) => {
-      const computed = computeLineItem(item);
+  const handleQtyChange = (productId: string, value: number) => {
+    setRows((prev) =>
+      prev.map((row) =>
+        row.productId === productId
+          ? { ...row, returnQty: Math.max(0, Math.min(value, row.quantityEligible)) }
+          : row,
+      ),
+    );
+    setRowsError(null);
+  };
+
+  const selectedRows = rows.filter((r) => r.returnQty > 0);
+  const totals = selectedRows.reduce(
+    (acc, row) => {
+      const computed = computeLineItem({ quantity: row.returnQty, rate: row.rate, gstPercent: row.gstPercent });
       acc.subtotal += computed.taxable;
       acc.gstTotal += computed.gstAmount;
       acc.grandTotal += computed.total;
@@ -109,61 +182,69 @@ export const ReturnFormPage = () => {
     { subtotal: 0, gstTotal: 0, grandTotal: 0 },
   );
 
-  const handleProductSelect = (index: number, product: Product | null) => {
-    setValue(`items.${index}.productId`, product?.id ?? "");
-    setValue(`items.${index}.itemName`, product?.itemName ?? "");
-    if (product) {
-      setValue(`items.${index}.rate`, Number(product.sellingPrice));
-      setValue(`items.${index}.gstPercent`, Number(product.gstPercent));
+  const onSubmit = (values: ReturnFormValues) => {
+    if (selectedRows.length === 0) {
+      setRowsError("Enter a return quantity for at least one item");
+      return;
     }
+    setForm(values);
+    mutation.mutate();
   };
 
-  const onSubmit = (values: ReturnFormValues) => {
-    mutation.mutate({
-      customerId: values.customerId,
-      returnDate: values.returnDate,
-      saleId: selectedSale?.id,
-      reason: values.reason || undefined,
-      items: values.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        rate: item.rate,
-        gstPercent: item.gstPercent,
-      })),
-    });
-  };
+  if (isEdit && existingLoading) return <PageLoader />;
 
   return (
     <>
-      <PageHeader title="New Return" subtitle="Record a customer sales return" />
+      <PageHeader
+        title={isEdit ? `Edit Return ${existingReturn?.returnNumber ?? ""}` : "New Return"}
+        subtitle="Products can only be returned against their original invoice"
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mb: 2.5 }}>
           <Grid container spacing={2.5}>
             <Grid size={{ xs: 12, sm: 5 }}>
-              <CustomerAutocomplete
-                value={selectedCustomer}
-                onChange={(customer) => {
-                  setSelectedCustomer(customer);
-                  setSelectedSale(null);
-                  setValue("customerId", customer?.id ?? "");
-                }}
-                error={!!errors.customerId}
-                helperText={errors.customerId?.message}
-              />
+              {isEdit ? (
+                <TextField label="Customer" value={selectedCustomer?.companyName ?? ""} fullWidth disabled />
+              ) : (
+                <CustomerAutocomplete
+                  value={selectedCustomer}
+                  onChange={(customer) => {
+                    setSelectedCustomer(customer);
+                    setSelectedSale(null);
+                    setValue("customerId", customer?.id ?? "");
+                    setValue("saleId", "");
+                  }}
+                  error={!!errors.customerId}
+                  helperText={errors.customerId?.message}
+                />
+              )}
             </Grid>
             <Grid size={{ xs: 12, sm: 4 }}>
-              <Autocomplete
-                options={customerSales?.data ?? []}
-                value={selectedSale}
-                disabled={!selectedCustomer}
-                onChange={(_e, val) => setSelectedSale(val)}
-                getOptionLabel={(option) => option.invoiceNumber}
-                isOptionEqualToValue={(o, v) => o.id === v.id}
-                renderInput={(params) => (
-                  <TextField {...params} label="Original Invoice (optional)" />
-                )}
-              />
+              {isEdit ? (
+                <TextField label="Original Invoice" value={selectedSale?.invoiceNumber ?? ""} fullWidth disabled />
+              ) : (
+                <Autocomplete
+                  options={customerSales?.data ?? []}
+                  value={selectedSale}
+                  disabled={!selectedCustomer}
+                  onChange={(_e, val) => {
+                    setSelectedSale(val);
+                    setValue("saleId", val?.id ?? "");
+                  }}
+                  getOptionLabel={(option) => option.invoiceNumber}
+                  isOptionEqualToValue={(o, v) => o.id === v.id}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Original Invoice"
+                      required
+                      error={!!errors.saleId}
+                      helperText={errors.saleId?.message}
+                    />
+                  )}
+                />
+              )}
             </Grid>
             <Grid size={{ xs: 12, sm: 3 }}>
               <Controller
@@ -192,98 +273,75 @@ export const ReturnFormPage = () => {
         </Paper>
 
         <Paper variant="outlined" sx={{ p: 3, borderRadius: 3, mb: 2.5 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-            <Typography variant="subtitle1">Returned Items</Typography>
-            <Button size="small" startIcon={<AddIcon />} onClick={() => append(emptyItem)}>
-              Add Item
-            </Button>
-          </Stack>
+          <Typography variant="subtitle1" sx={{ mb: 2 }}>
+            Eligible Items
+          </Typography>
 
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ minWidth: 220 }}>Product</TableCell>
-                  <TableCell width={100}>Qty</TableCell>
-                  <TableCell width={120}>Rate</TableCell>
-                  <TableCell width={100}>GST %</TableCell>
-                  <TableCell width={130} align="right">
-                    Total
-                  </TableCell>
-                  <TableCell width={50} />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {fields.map((field, index) => {
-                  const item = watchedItems[index];
-                  const computed = computeLineItem(item ?? emptyItem);
-                  return (
-                    <TableRow key={field.id}>
-                      <TableCell>
-                        <ProductAutocomplete
-                          value={
-                            item?.productId
-                              ? ({ id: item.productId, itemName: item.itemName } as Product)
-                              : null
-                          }
-                          onChange={(product) => handleProductSelect(index, product)}
-                        />
-                        {errors.items?.[index]?.productId && (
-                          <Typography variant="caption" color="error">
-                            {errors.items[index]?.productId?.message}
-                          </Typography>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          type="number"
-                          fullWidth
-                          slotProps={{ htmlInput: { step: "0.01", min: 0 } }}
-                          {...register(`items.${index}.quantity`)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          type="number"
-                          fullWidth
-                          slotProps={{ htmlInput: { step: "0.01", min: 0 } }}
-                          {...register(`items.${index}.rate`)}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          size="small"
-                          type="number"
-                          fullWidth
-                          slotProps={{ htmlInput: { step: "0.01", min: 0, max: 100 } }}
-                          {...register(`items.${index}.gstPercent`)}
-                        />
-                      </TableCell>
-                      <TableCell align="right">{formatCurrency(computed.total)}</TableCell>
-                      <TableCell>
-                        <Tooltip title="Remove">
-                          <span>
-                            <IconButton
-                              size="small"
-                              disabled={fields.length === 1}
-                              onClick={() => remove(index)}
-                            >
-                              <DeleteOutlineIcon fontSize="small" />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          {errors.items && typeof errors.items.message === "string" && (
+          {!selectedSale && (
+            <Typography color="text.secondary">Select a customer and invoice to see returnable items.</Typography>
+          )}
+
+          {selectedSale && eligibleLoading && <PageLoader />}
+
+          {selectedSale && !eligibleLoading && rows.length === 0 && (
+            <Typography color="text.secondary">This invoice has no items.</Typography>
+          )}
+
+          {selectedSale && !eligibleLoading && rows.length > 0 && (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ minWidth: 200 }}>Product</TableCell>
+                    <TableCell align="right">Sold</TableCell>
+                    <TableCell align="right">Already Returned</TableCell>
+                    <TableCell align="right">Eligible</TableCell>
+                    <TableCell width={120}>Return Qty</TableCell>
+                    <TableCell align="right" width={130}>
+                      Line Total
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {rows.map((row) => {
+                    const computed = computeLineItem({
+                      quantity: row.returnQty,
+                      rate: row.rate,
+                      gstPercent: row.gstPercent,
+                    });
+                    return (
+                      <TableRow key={row.productId} hover>
+                        <TableCell>
+                          {row.itemName}
+                          {row.quantityEligible <= 0 && (
+                            <Chip label="Fully returned" size="small" sx={{ ml: 1 }} />
+                          )}
+                        </TableCell>
+                        <TableCell align="right">{formatNumber(row.quantitySold)}</TableCell>
+                        <TableCell align="right">{formatNumber(row.quantityReturned)}</TableCell>
+                        <TableCell align="right">{formatNumber(row.quantityEligible)}</TableCell>
+                        <TableCell>
+                          <TextField
+                            size="small"
+                            type="number"
+                            fullWidth
+                            disabled={row.quantityEligible <= 0}
+                            value={row.returnQty}
+                            onChange={(e) => handleQtyChange(row.productId, Number(e.target.value))}
+                            slotProps={{ htmlInput: { step: "0.01", min: 0, max: row.quantityEligible } }}
+                          />
+                        </TableCell>
+                        <TableCell align="right">{formatCurrency(computed.total)}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+          {rowsError && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              {errors.items.message}
+              {rowsError}
             </Alert>
           )}
         </Paper>

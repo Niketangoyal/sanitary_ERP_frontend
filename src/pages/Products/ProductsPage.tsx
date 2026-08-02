@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
 import {
@@ -30,6 +31,7 @@ import { ProductFormDialog } from "./ProductFormDialog";
 import type { ProductFormValues } from "./ProductFormDialog";
 
 export const ProductsPage = () => {
+  const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
   const { confirm, ConfirmDialog } = useConfirm();
   const queryClient = useQueryClient();
@@ -132,7 +134,7 @@ export const ProductsPage = () => {
         id: "actions",
         header: "Actions",
         cell: ({ row }) => (
-          <Stack direction="row" spacing={0.5}>
+          <Stack direction="row" spacing={0.5} onClick={(e) => e.stopPropagation()}>
             <Tooltip title="Edit">
               <IconButton
                 size="small"
@@ -215,6 +217,7 @@ export const ProductsPage = () => {
         isLoading={isLoading}
         onPageChange={setPage}
         onRowsPerPageChange={setRowsPerPage}
+        onRowClick={(row) => navigate(`/products/${row.id}`)}
         emptyMessage="No products yet. Add your first product to get started."
       />
 

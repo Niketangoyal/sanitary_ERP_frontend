@@ -18,13 +18,15 @@ import Grid from "@mui/material/Grid2";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { CustomerAutocomplete } from "@/components/CustomerAutocomplete";
 import { PAYMENT_MODE_LABELS, ACCOUNT_TYPE_LABELS } from "@/utils/constants";
-import type { Customer } from "@/types";
+import type { Customer, Payment } from "@/types";
 
+// Payments are a customer-ledger credit (Khata-style) — always against the
+// customer's Cash or Bill account as a whole, never a specific invoice.
 const paymentSchema = z.object({
   customerId: z.string().min(1, "Select a customer"),
   date: z.string().min(1),
   amount: z.coerce.number().positive("Amount must be greater than 0"),
-  mode: z.enum(["CASH", "UPI", "BANK_TRANSFER", "CHEQUE"]),
+  mode: z.enum(["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"]),
   accountType: z.enum(["CASH", "BILL"]),
   remarks: z.string().optional(),
 });
@@ -37,6 +39,7 @@ interface PaymentFormDialogProps {
   onSubmit: (values: PaymentFormValues) => void;
   isSubmitting?: boolean;
   defaultCustomer?: Customer | null;
+  initialData?: Payment | null;
 }
 
 export const PaymentFormDialog = ({
@@ -45,8 +48,10 @@ export const PaymentFormDialog = ({
   onSubmit,
   isSubmitting,
   defaultCustomer,
+  initialData,
 }: PaymentFormDialogProps) => {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(defaultCustomer ?? null);
+  const isEdit = !!initialData;
 
   const {
     register,
@@ -68,7 +73,18 @@ export const PaymentFormDialog = ({
   });
 
   useEffect(() => {
-    if (open) {
+    if (!open) return;
+    if (initialData) {
+      setSelectedCustomer(initialData.customer ?? null);
+      reset({
+        customerId: initialData.customerId,
+        date: dayjs(initialData.date).format("YYYY-MM-DD"),
+        amount: Number(initialData.amount),
+        mode: initialData.mode,
+        accountType: initialData.accountType,
+        remarks: initialData.remarks ?? "",
+      });
+    } else {
       setSelectedCustomer(defaultCustomer ?? null);
       reset({
         customerId: defaultCustomer?.id ?? "",
@@ -79,24 +95,28 @@ export const PaymentFormDialog = ({
         remarks: "",
       });
     }
-  }, [open, defaultCustomer, reset]);
+  }, [open, defaultCustomer, initialData, reset]);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Record Payment</DialogTitle>
+      <DialogTitle>{isEdit ? "Edit Payment" : "Record Payment"}</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent dividers>
           <Grid container spacing={2}>
             <Grid size={12}>
-              <CustomerAutocomplete
-                value={selectedCustomer}
-                onChange={(customer) => {
-                  setSelectedCustomer(customer);
-                  setValue("customerId", customer?.id ?? "");
-                }}
-                error={!!errors.customerId}
-                helperText={errors.customerId?.message}
-              />
+              {isEdit ? (
+                <TextField label="Customer" value={selectedCustomer?.companyName ?? ""} fullWidth disabled />
+              ) : (
+                <CustomerAutocomplete
+                  value={selectedCustomer}
+                  onChange={(customer) => {
+                    setSelectedCustomer(customer);
+                    setValue("customerId", customer?.id ?? "");
+                  }}
+                  error={!!errors.customerId}
+                  helperText={errors.customerId?.message}
+                />
+              )}
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <Controller

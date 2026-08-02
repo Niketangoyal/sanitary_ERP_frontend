@@ -1,11 +1,16 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSnackbar } from "notistack";
-import { Button, Chip } from "@mui/material";
+import { Button, Chip, IconButton, InputAdornment, Stack, TextField, Tooltip } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import SearchIcon from "@mui/icons-material/Search";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import type { ColumnDef } from "@tanstack/react-table";
 import { PageHeader } from "@/components/PageHeader";
 import { DataTable } from "@/components/DataTable";
+import { useConfirm } from "@/hooks/useConfirm";
+import { useDebounce } from "@/hooks/useDebounce";
 import { usePaginatedQuery } from "@/hooks/usePaginatedQuery";
 import { paymentService } from "@/services/payment.service";
 import { getErrorMessage } from "@/api/axiosClient";
@@ -17,25 +22,81 @@ import type { PaymentFormValues } from "./PaymentFormDialog";
 
 export const PaymentsPage = () => {
   const { enqueueSnackbar } = useSnackbar();
+  const { confirm, ConfirmDialog } = useConfirm();
   const queryClient = useQueryClient();
   const [formOpen, setFormOpen] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<Payment | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const debouncedSearch = useDebounce(searchInput, 400);
 
-  const { data, meta, isLoading, setPage, setRowsPerPage } = usePaginatedQuery({
+  const { data, meta, isLoading, filters, setFilters, setPage, setRowsPerPage } = usePaginatedQuery({
     queryKey: "payments",
     fetcher: paymentService.list,
   });
+
+  useMemo(() => {
+    if (debouncedSearch !== (filters.search ?? "")) {
+      setFilters({ search: debouncedSearch || undefined } as never);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch]);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["payments"] });
+    queryClient.invalidateQueries({ queryKey: ["customers"] });
+    queryClient.invalidateQueries({ queryKey: ["sales"] });
+    queryClient.invalidateQueries({ queryKey: ["ledger"] });
+  };
 
   const createMutation = useMutation({
     mutationFn: (values: PaymentFormValues) =>
       paymentService.create({ ...values, remarks: values.remarks || undefined }),
     onSuccess: (payment) => {
       enqueueSnackbar(`Payment ${payment.paymentNumber} recorded`, { variant: "success" });
-      queryClient.invalidateQueries({ queryKey: ["payments"] });
-      queryClient.invalidateQueries({ queryKey: ["customers"] });
+      invalidate();
       setFormOpen(false);
     },
     onError: (err) => enqueueSnackbar(getErrorMessage(err), { variant: "error" }),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, values }: { id: string; values: PaymentFormValues }) =>
+      paymentService.update(id, { ...values, remarks: values.remarks || undefined }),
+    onSuccess: (payment) => {
+      enqueueSnackbar(`Payment ${payment.paymentNumber} updated`, { variant: "success" });
+      invalidate();
+      setFormOpen(false);
+      setEditingPayment(null);
+    },
+    onError: (err) => enqueueSnackbar(getErrorMessage(err), { variant: "error" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => paymentService.remove(id),
+    onSuccess: () => {
+      enqueueSnackbar("Payment deleted", { variant: "success" });
+      invalidate();
+    },
+    onError: (err) => enqueueSnackbar(getErrorMessage(err), { variant: "error" }),
+  });
+
+  const handleDelete = async (payment: Payment) => {
+    const ok = await confirm({
+      title: "Delete Payment",
+      message: `Delete payment ${payment.paymentNumber} of ${formatCurrency(payment.amount)}? This action cannot be undone.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (ok) deleteMutation.mutate(payment.id);
+  };
+
+  const handleFormSubmit = (values: PaymentFormValues) => {
+    if (editingPayment) {
+      updateMutation.mutate({ id: editingPayment.id, values });
+    } else {
+      createMutation.mutate(values);
+    }
+  };
 
   const columns = useMemo<ColumnDef<Payment, any>[]>(
     () => [
@@ -68,7 +129,32 @@ export const PaymentsPage = () => {
         cell: (c) => formatCurrency(c.getValue() as string),
       },
       { accessorKey: "remarks", header: "Remarks", cell: (c) => c.getValue() ?? "-" },
+      {
+        id: "actions",
+        header: "Actions",
+        cell: ({ row }) => (
+          <Stack direction="row" spacing={0.5}>
+            <Tooltip title="Edit">
+              <IconButton
+                size="small"
+                onClick={() => {
+                  setEditingPayment(row.original);
+                  setFormOpen(true);
+                }}
+              >
+                <EditOutlinedIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Delete">
+              <IconButton size="small" onClick={() => handleDelete(row.original)}>
+                <DeleteOutlineIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
+        ),
+      },
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -78,10 +164,33 @@ export const PaymentsPage = () => {
         title="Payments"
         subtitle="Cash, UPI, bank & cheque receipts from customers"
         actions={
-          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setFormOpen(true)}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setEditingPayment(null);
+              setFormOpen(true);
+            }}
+          >
             Record Payment
           </Button>
         }
+      />
+
+      <TextField
+        placeholder="Search by payment number or customer..."
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        sx={{ mb: 2, maxWidth: 420 }}
+        slotProps={{
+          input: {
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          },
+        }}
       />
 
       <DataTable
@@ -96,10 +205,16 @@ export const PaymentsPage = () => {
 
       <PaymentFormDialog
         open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onSubmit={(values) => createMutation.mutate(values)}
-        isSubmitting={createMutation.isPending}
+        onClose={() => {
+          setFormOpen(false);
+          setEditingPayment(null);
+        }}
+        onSubmit={handleFormSubmit}
+        isSubmitting={createMutation.isPending || updateMutation.isPending}
+        initialData={editingPayment}
       />
+
+      {ConfirmDialog}
     </>
   );
 };
