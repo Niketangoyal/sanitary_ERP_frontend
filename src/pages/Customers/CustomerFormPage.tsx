@@ -51,7 +51,7 @@ export const CustomerFormPage = () => {
     handleSubmit,
     control,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<CustomerFormValues>({
     resolver: zodResolver(customerSchema),
     defaultValues: {
@@ -180,12 +180,12 @@ export const CustomerFormPage = () => {
 
             <Grid size={12}>
               <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-                <Button onClick={() => navigate("/customers")}>Cancel</Button>
+                <Button onClick={() => navigate("/customers")} disabled={mutation.isPending}>Cancel</Button>
                 <Button
                   type="submit"
                   variant="contained"
                   startIcon={<SaveIcon />}
-                  disabled={isSubmitting}
+                  disabled={mutation.isPending}
                 >
                   {isEdit ? "Save Changes" : "Create Customer"}
                 </Button>

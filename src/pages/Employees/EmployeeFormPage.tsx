@@ -50,7 +50,7 @@ export const EmployeeFormPage = () => {
     handleSubmit,
     control,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<EmployeeFormValues>({
     resolver: zodResolver(employeeSchema),
     defaultValues: {
@@ -213,8 +213,8 @@ export const EmployeeFormPage = () => {
 
             <Grid size={12}>
               <Stack direction="row" spacing={1.5} justifyContent="flex-end">
-                <Button onClick={() => navigate("/employees")}>Cancel</Button>
-                <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={isSubmitting}>
+                <Button onClick={() => navigate("/employees")} disabled={mutation.isPending}>Cancel</Button>
+                <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={mutation.isPending}>
                   {isEdit ? "Save Changes" : "Add Employee"}
                 </Button>
               </Stack>

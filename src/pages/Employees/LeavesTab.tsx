@@ -109,7 +109,7 @@ export const LeavesTab = ({ employeeId }: { employeeId: string }) => {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [handleDelete],
   );
 
   return (

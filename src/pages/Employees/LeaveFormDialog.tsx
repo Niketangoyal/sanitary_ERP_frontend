@@ -63,7 +63,7 @@ export const LeaveFormDialog = ({ open, onClose, onSubmit, isSubmitting, initial
   }, [open, initialData, reset]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={isSubmitting ? undefined : onClose} maxWidth="xs" fullWidth>
       <DialogTitle>{initialData ? "Edit Leave" : "Add Leave"}</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent dividers>
@@ -117,7 +117,7 @@ export const LeaveFormDialog = ({ open, onClose, onSubmit, isSubmitting, initial
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={isSubmitting}>
             Save
           </Button>

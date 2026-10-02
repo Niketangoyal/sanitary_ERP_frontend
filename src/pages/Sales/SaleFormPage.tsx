@@ -93,7 +93,7 @@ export const SaleFormPage = () => {
     setError,
     watch,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<SaleFormValues>({
     resolver: zodResolver(saleFormSchema),
     defaultValues: {
@@ -136,8 +136,39 @@ export const SaleFormPage = () => {
   }, [existingSale, reset]);
 
   const mutation = useMutation({
-    mutationFn: (values: Parameters<typeof saleService.create>[0]) =>
-      isEdit ? saleService.update(id as string, values) : saleService.create(values),
+    mutationFn: (values: SaleFormValues) =>
+      isEdit
+        ? saleService.update(id as string, {
+            invoiceDate: values.invoiceDate,
+            saleType: values.saleType,
+            paymentStatus: values.paymentStatus,
+            paymentMethod: values.paymentStatus === "UNPAID" ? undefined : values.paymentMethod,
+            amountPaid: values.paymentStatus === "UNPAID" ? 0 : values.amountPaid,
+            notes: values.notes || undefined,
+            items: values.items.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              rate: item.rate,
+              discountPercent: item.discountPercent,
+              gstPercent: item.gstPercent,
+            })),
+          })
+        : saleService.create({
+            customerId: values.customerId,
+            invoiceDate: values.invoiceDate,
+            saleType: values.saleType,
+            paymentStatus: values.paymentStatus,
+            paymentMethod: values.paymentStatus === "UNPAID" ? undefined : values.paymentMethod,
+            amountPaid: values.paymentStatus === "UNPAID" ? 0 : values.amountPaid,
+            notes: values.notes || undefined,
+            items: values.items.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              rate: item.rate,
+              discountPercent: item.discountPercent,
+              gstPercent: item.gstPercent,
+            })),
+          }),
     onSuccess: (sale) => {
       enqueueSnackbar(`Invoice ${sale.invoiceNumber} ${isEdit ? "updated" : "created"}`, { variant: "success" });
       navigate(`/sales/${sale.id}`);
@@ -180,22 +211,7 @@ export const SaleFormPage = () => {
       }
     }
 
-    mutation.mutate({
-      customerId: values.customerId,
-      invoiceDate: values.invoiceDate,
-      saleType: values.saleType,
-      paymentStatus: values.paymentStatus,
-      paymentMethod: values.paymentStatus === "UNPAID" ? undefined : values.paymentMethod,
-      amountPaid: values.paymentStatus === "UNPAID" ? 0 : values.amountPaid,
-      notes: values.notes || undefined,
-      items: values.items.map((item) => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        rate: item.rate,
-        discountPercent: item.discountPercent,
-        gstPercent: item.gstPercent,
-      })),
-    });
+    mutation.mutate(values);
   };
 
   if (isEdit && existingLoading) return <PageLoader />;
@@ -501,8 +517,8 @@ export const SaleFormPage = () => {
               )}
 
               <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mt: 3 }}>
-                <Button onClick={() => navigate("/sales")}>Cancel</Button>
-                <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={isSubmitting}>
+                <Button onClick={() => navigate("/sales")} disabled={mutation.isPending}>Cancel</Button>
+                <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={mutation.isPending}>
                   {isEdit ? "Save Changes" : "Save Invoice"}
                 </Button>
               </Stack>

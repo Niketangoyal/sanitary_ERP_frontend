@@ -82,7 +82,7 @@ export const ReturnFormPage = () => {
     handleSubmit,
     setValue,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<ReturnFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -118,21 +118,12 @@ export const ReturnFormPage = () => {
     );
   }, [eligibleItems, existingReturn]);
 
-  // Plain snapshot of form values, set on submit — read inside the mutation
-  // closure since RHF's own state isn't convenient to pull from there.
-  const [form, setForm] = useState<ReturnFormValues>({
-    customerId: "",
-    saleId: "",
-    returnDate: dayjs().format("YYYY-MM-DD"),
-    reason: "",
-  });
-
   const mutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (formValues: ReturnFormValues) =>
       isEdit
         ? returnService.update(id as string, {
-            returnDate: form.returnDate,
-            reason: form.reason || undefined,
+            returnDate: formValues.returnDate,
+            reason: formValues.reason || undefined,
             items: selectedRows.map((row) => ({
               productId: row.productId,
               quantity: row.returnQty,
@@ -141,10 +132,10 @@ export const ReturnFormPage = () => {
             })),
           })
         : returnService.create({
-            customerId: form.customerId,
-            returnDate: form.returnDate,
-            saleId: form.saleId,
-            reason: form.reason || undefined,
+            customerId: formValues.customerId,
+            returnDate: formValues.returnDate,
+            saleId: formValues.saleId,
+            reason: formValues.reason || undefined,
             items: selectedRows.map((row) => ({
               productId: row.productId,
               quantity: row.returnQty,
@@ -187,8 +178,7 @@ export const ReturnFormPage = () => {
       setRowsError("Enter a return quantity for at least one item");
       return;
     }
-    setForm(values);
-    mutation.mutate();
+    mutation.mutate(values);
   };
 
   if (isEdit && existingLoading) return <PageLoader />;
@@ -378,8 +368,8 @@ export const ReturnFormPage = () => {
               )}
 
               <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mt: 3 }}>
-                <Button onClick={() => navigate("/returns")}>Cancel</Button>
-                <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={isSubmitting}>
+                <Button onClick={() => navigate("/returns")} disabled={mutation.isPending}>Cancel</Button>
+                <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={mutation.isPending}>
                   Save Return
                 </Button>
               </Stack>

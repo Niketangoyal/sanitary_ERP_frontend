@@ -95,7 +95,7 @@ export const PurchaseFormDialog = ({
   }, [open, initialData, reset]);
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={isSubmitting ? undefined : onClose} maxWidth="sm" fullWidth>
       <DialogTitle>{isEdit ? "Edit Purchase" : "Record Purchase"}</DialogTitle>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
         <DialogContent dividers>
@@ -185,7 +185,7 @@ export const PurchaseFormDialog = ({
           </Grid>
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose} disabled={isSubmitting}>Cancel</Button>
           <Button type="submit" variant="contained" disabled={isSubmitting}>
             Save Purchase
           </Button>
